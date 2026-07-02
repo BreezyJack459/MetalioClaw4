@@ -2,7 +2,7 @@
 
 > **版本**：与固件 `openclaw_screen` 当前实现对齐  
 > **适用对象**：后端开发者、联调测试  
-> **设备型号**：xingzhi-395（OpenClaw 应用页）  
+> **设备型号**：metalio-claw-4（OpenClaw 应用页）  
 > **固件源码**：`main/display/screen/openclaw_screen/openclaw_screen.cc`
 
 本文档描述 ESP32 设备 **OpenClaw** 页面与 **龙虾云服务**（`http://claw.cloudzao.cn`）之间的 HTTP 接口。设备不直接访问上游 AI，所有请求经云端中转。

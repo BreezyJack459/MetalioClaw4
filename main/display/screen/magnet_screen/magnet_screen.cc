@@ -18,7 +18,7 @@
 LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_puhui_30_4);
 
-extern "C" i2c_master_bus_handle_t xingzhi_395_get_i2c_bus();
+extern "C" i2c_master_bus_handle_t metalio_claw_4_get_i2c_bus();
 
 namespace {
 
@@ -186,7 +186,7 @@ UiState s_ui;
 // ---------------------------------------------------------------------------
 void EnsureSensorInited() {
     if (s_mag != nullptr && s_mag_init) return;
-    i2c_master_bus_handle_t bus = xingzhi_395_get_i2c_bus();
+    i2c_master_bus_handle_t bus = metalio_claw_4_get_i2c_bus();
     if (bus == nullptr) {
         ESP_LOGE(TAG, "I2C bus 未就绪，跳过 QMC6309 初始化");
         return;

@@ -12,7 +12,7 @@
 // 头文件、调 Bq27220Gauge::GetInstance().XXX() 就能拿到电压 / 电流 / 电量，
 // 不用再 extern 或者透出板子私有类。
 //
-// 行为要点（沿用从 xingzhi-395 板抽出的实现，保持兼容）：
+// 行为要点（沿用从 metalio-claw-4 板抽出的实现，保持兼容）：
 //   - Begin() 用 i2c_master_probe 做地址级 ACK 检测，BQ27220 没接 / 没上电时
 //     不会 ESP_ERROR_CHECK 崩溃，只是 IsReady() 返回 false。
 //   - GetBatteryLevel() 走 "电压 -> SOC 线性内插 + 60 点滑动平均" 路径，

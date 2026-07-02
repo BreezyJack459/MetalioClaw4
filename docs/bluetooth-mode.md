@@ -1,8 +1,8 @@
 # 蓝牙音频模块模式切换说明
 
-> **版本**：与固件 `bluetooth_screen` / `music_screen` / `xingzhi-395` 当前实现对齐  
+> **版本**：与固件 `bluetooth_screen` / `music_screen` / `metalio-claw-4` 当前实现对齐  
 > **适用对象**：使用者、固件开发者、硬件联调  
-> **设备型号**：xingzhi-395（独立蓝牙音频芯片 + ESP32-P4 经 UART 控制）
+> **设备型号**：metalio-claw-4（独立蓝牙音频芯片 + ESP32-P4 经 UART 控制）
 
 本文档说明设备如何通过 **UART（115200）** 向蓝牙音频芯片发送 AT 指令，在三种工作模式之间切换，以及各 UI 页面、开机流程在何时触发切换。
 
@@ -54,7 +54,7 @@ stateDiagram-v2
 
 | 触发场景 | 对用户的表现 | 切到哪个模式 | 是否自动切回 | 相关代码 |
 |:---|:---|:---:|:---|:---|
-| **设备开机** | 上电后蓝牙进入默认状态 | **模式 1** | 否 | `xingzhi-395.cc` → `InitializeBTAudio()` → `BluetoothScreen::ApplyDefaultMode()` |
+| **设备开机** | 上电后蓝牙进入默认状态 | **模式 1** | 否 | `metalio-claw-4.cc` → `InitializeBTAudio()` → `BluetoothScreen::ApplyDefaultMode()` |
 | **打开「蓝牙配置」** | 进入页面，界面反映当前模式 | **不变** | — | `bluetooth_screen.cc` → `LifecycleCallback(LOAD)` 仅注册 UART 回调 |
 | **蓝牙配置 · 点「模式1/2/3」** | 状态栏显示「切换模式 x…」 | 用户所选 | 否 | `on_mode_btn_clicked` → `send_mode_command` → `mode_cmd_task` |
 | **离开「蓝牙配置」** | 返回主页 | **不变** | — | `LifecycleCallback(UNLOAD)` 仅注销回调 |
@@ -114,7 +114,7 @@ stateDiagram-v2
 | 主题 | 文件 |
 |:---|:---|
 | 蓝牙配置 UI、三种模式切换、扫描/连接 | `main/display/screen/bluetooth_screen/bluetooth_screen.cc` |
-| 开机默认模式 1 | `main/boards/xingzhi-395/xingzhi-395.cc` → `InitializeBTAudio()` |
+| 开机默认模式 1 | `main/boards/metalio-claw-4/metalio-claw-4.cc` → `InitializeBTAudio()` |
 | 音乐页进出切模式 3 / 1 | `main/display/screen/music_screen/music_screen.cc` |
 | UART 封装 | `main/boards/common/SimpleUart.hpp` |
 | 蓝牙芯片电源 | `main/boards/common/IOExpander.hpp` → `Pin::BT_POWER` |
@@ -125,7 +125,7 @@ stateDiagram-v2
 ```
 SimpleUart (UART_NUM_2, 115200)
     ↑
-    ├── 开机: xingzhi-395.cc::InitializeBTAudio()
+    ├── 开机: metalio-claw-4.cc::InitializeBTAudio()
     │         └── BluetoothScreen::ApplyDefaultMode()
     │               └── send_mode_command(kMode1) → task "bt_mode_cmd"
     │

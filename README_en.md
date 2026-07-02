@@ -2,7 +2,7 @@
 
 [中文](README.md) | **English**
 
-**Metalio Claw4** is firmware for a 3.95-inch (720×720) touch AI voice device on **ESP32-P4**, customized for the **[xingzhi-395](main/boards/xingzhi-395/)** board on the [Xiaozhi AI](https://github.com/78/xiaozhi-esp32) architecture.
+**Metalio Claw4** is firmware for a 3.95-inch (720×720) touch AI voice device on **ESP32-P4**, customized for the **[metalio-claw-4](main/boards/metalio-claw-4/)** board on the [Xiaozhi AI](https://github.com/78/xiaozhi-esp32) architecture.
 
 ---
 
@@ -14,7 +14,7 @@
 |:---|:---|
 | **ESP-IDF** | **v5.5.4** (required; matches the `sdkconfig` in this repo) |
 | **Target SoC** | ESP32-P4 (preconfigured; **no** manual `set-target` needed) |
-| **Board** | Metalio Claw4 (board directory: `main/boards/xingzhi-395/`) |
+| **Board** | Metalio Claw4 (board directory: `main/boards/metalio-claw-4/`) |
 
 ### Install ESP-IDF
 
@@ -57,7 +57,7 @@ Replace `/dev/ttyUSB0` with your actual serial port (e.g. `COM3` on Windows).
 | **Bluetooth** | External BT audio module (UART AT commands) |
 | **Peripherals** | SD card, battery gauge, IO expander, GPS, vibration motor, etc. |
 
-Pin definitions and display settings: `main/boards/xingzhi-395/config.h`.
+Pin definitions and display settings: `main/boards/metalio-claw-4/config.h`.
 
 ---
 
@@ -107,10 +107,10 @@ See [docs/bluetooth-mode.md](docs/bluetooth-mode.md) for details.
 ```
 main/
 ├── application.cc              # Boot, state machine, protocols
-├── boards/xingzhi-395/         # Metalio Claw4 board init
+├── boards/metalio-claw-4/         # Metalio Claw4 board init
 │   ├── config.h                # Pins, display params
 │   ├── config.json             # Build config (name: Metalio Claw4)
-│   └── xingzhi-395.cc          # Board entry point
+│   └── metalio-claw-4.cc          # Board entry point
 ├── display/screen/             # App screens
 ├── audio/                      # Record, playback, wake word
 └── protocols/                  # WebSocket / MQTT, etc.

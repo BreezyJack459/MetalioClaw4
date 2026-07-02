@@ -8,7 +8,7 @@
 #include <cstring>
 
 // ---------------------------------------------------------------------------
-// NMEA-0183 reader for the xingzhi-395's on-board GPS module.
+// NMEA-0183 reader for the metalio-claw-4's on-board GPS module.
 //
 // Wiring:
 //   - GPS power is gated by TCA9555 P0 ("GPS_POWER").  This service does

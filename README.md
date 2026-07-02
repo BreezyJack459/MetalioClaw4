@@ -2,7 +2,7 @@
 
 **[中文](README.md)** | [English](README_en.md)
 
-**Metalio Claw4** 是基于 **ESP32-P4** 的 3.95 寸（720×720）触控 AI 语音交互固件，在 [小智 AI](https://github.com/78/xiaozhi-esp32) 架构上为 **[xingzhi-395](main/boards/xingzhi-395/)** 开发板定制。
+**Metalio Claw4** 是基于 **ESP32-P4** 的 3.95 寸（720×720）触控 AI 语音交互固件，在 [小智 AI](https://github.com/78/xiaozhi-esp32) 架构上为 **[metalio-claw-4](main/boards/metalio-claw-4/)** 开发板定制。
 
 ---
 
@@ -14,7 +14,7 @@
 |:---|:---|
 | **ESP-IDF** | **v5.5.4**（必须使用此版本，与仓库内 `sdkconfig` 一致） |
 | **目标芯片** | ESP32-P4（已预配置，**无需**手动 `set-target`） |
-| **开发板** | Metalio Claw4（板级目录 `main/boards/xingzhi-395/`） |
+| **开发板** | Metalio Claw4（板级目录 `main/boards/metalio-claw-4/`） |
 
 ### 安装 ESP-IDF
 
@@ -57,7 +57,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 | **蓝牙** | 独立蓝牙音频模块（UART AT 控制） |
 | **外设** | SD 卡、电池电量、IO 扩展、GPS、振动等 |
 
-板级引脚与屏参见 `main/boards/xingzhi-395/config.h`。
+板级引脚与屏参见 `main/boards/metalio-claw-4/config.h`。
 
 ---
 
@@ -107,10 +107,10 @@ idf.py -p /dev/ttyUSB0 flash monitor
 ```
 main/
 ├── application.cc              # 启动、状态机、协议
-├── boards/xingzhi-395/         # Metalio Claw4 板级初始化
+├── boards/metalio-claw-4/         # Metalio Claw4 板级初始化
 │   ├── config.h                # 引脚、屏参
 │   ├── config.json             # 构建配置（name: Metalio Claw4）
-│   └── xingzhi-395.cc          # 板级启动入口
+│   └── metalio-claw-4.cc          # 板级启动入口
 ├── display/screen/             # 各功能页面
 ├── audio/                      # 录音、播放、唤醒词
 └── protocols/                  # WebSocket / MQTT 等

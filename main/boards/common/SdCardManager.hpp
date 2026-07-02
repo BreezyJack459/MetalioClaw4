@@ -40,7 +40,7 @@
 //     调试 / 后续热插拔扩展用。
 //
 // 板级前置依赖：
-//   - 上层负责给 SDMMC PHY 上电（ESP32-P4 是 LDO chan 4，xingzhi-395 在
+//   - 上层负责给 SDMMC PHY 上电（ESP32-P4 是 LDO chan 4，metalio-claw-4 在
 //     InitializeSDWIFIPower() 里已申请）。
 //   - 板级 config.h 需要定义 SDMMC_CLK_PIN / SDMMC_CMD_PIN /
 //     SDMMC_D0_PIN..SDMMC_D3_PIN（在 SOC_SDMMC_USE_GPIO_MATRIX 平台上

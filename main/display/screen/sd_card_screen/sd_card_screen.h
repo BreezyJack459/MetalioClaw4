@@ -13,7 +13,7 @@
 //   - 一级目录文件列表，每行右侧有删除按钮
 //
 // 设计：
-//   SD 卡的 mount/unmount 由板级（XINGZHI_395::InitializeSdCard()）通过
+//   SD 卡的 mount/unmount 由板级（METALIO_CLAW_4::InitializeSdCard()）通过
 //   SdCardManager 单例完成，开机就挂好。本页面只读 SdCardManager 的状态、
 //   做 UI 渲染和文件删除，不再自己 mount，也不会在退出时 unmount。
 // ---------------------------------------------------------------------------
