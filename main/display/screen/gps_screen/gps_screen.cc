@@ -788,7 +788,7 @@ BinaryDownloadOutcome DownloadBinary(Http* http, const std::string& url) {
     http->SetTimeout(kHttpTimeoutMs);
     http->SetHeader("Accept", "*/*");
     http->SetHeader("Connection", "close");
-    http->SetHeader("User-Agent", "xingzhi-pad/1.0");
+    http->SetHeader("User-Agent", "metalio-claw-4/1.0");
 
     if (!http->Open("GET", url)) {
         out.err = "Open 失败";

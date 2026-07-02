@@ -232,7 +232,7 @@ const char* rssi_quality_text(int8_t rssi) {
 bool screen_alive() { return s_screen_active && s_ui.screen != nullptr; }
 
 int GetSavedNetworkType() {
-    // 与 DualNetworkBoard 启动时读 NVS 的逻辑一致（默认 4G=1，与 xingzhi-395 板级一致）
+    // 与 DualNetworkBoard 启动时读 NVS 的逻辑一致（默认 4G=1，与 metalio-claw-4 板级一致）
     const NetworkType type =
         DualNetworkBoard::LoadNetworkTypeFromSettings(kNetTypeCellular);
     return type == NetworkType::ML307 ? kNetTypeCellular : kNetTypeWifi;

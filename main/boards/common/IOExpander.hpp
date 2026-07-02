@@ -23,7 +23,7 @@
 // signal is declared as a strongly-typed `Pin` enum and bound to one of the
 // chip's 16 lines plus a `Direction` (input / output) via the pin map.
 //
-// Typical use (xingzhi-395 board -- default pin map is built in):
+// Typical use (metalio-claw-4 board -- default pin map is built in):
 //
 //     auto& io = IOExpander::getInstance();
 //     io.begin(i2c_bus_);
@@ -91,7 +91,7 @@ public:
         Direction direction = Direction::kOutput;
     };
 
-    // xingzhi-395 TCA9555 wiring.
+    // metalio-claw-4 TCA9555 wiring.
     //
     // 这里 kDefaultPinMap 被声明成 `static constexpr` 数组放在类体内，
     // 同一个类还在解析中 ── gcc 不允许这种位置使用 PinMapEntry 的默认

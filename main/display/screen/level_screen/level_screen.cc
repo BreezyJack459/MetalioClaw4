@@ -21,7 +21,7 @@
 LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_puhui_30_4);
 
-extern "C" i2c_master_bus_handle_t xingzhi_395_get_i2c_bus();
+extern "C" i2c_master_bus_handle_t metalio_claw_4_get_i2c_bus();
 
 namespace {
 
@@ -175,7 +175,7 @@ void ResetCalOffsets() {
 void EnsureSensorInited() {
     if (s_sensor != nullptr && s_sensor_init) return;
     if (s_sensor == nullptr) {
-        i2c_master_bus_handle_t bus = xingzhi_395_get_i2c_bus();
+        i2c_master_bus_handle_t bus = metalio_claw_4_get_i2c_bus();
         if (bus == nullptr) {
             ESP_LOGE(TAG, "I2C bus 未就绪，跳过 SC7A20H 初始化");
             s_sensor_init = false;

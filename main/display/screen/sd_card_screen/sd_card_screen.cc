@@ -412,7 +412,7 @@ lv_obj_t* SdCardScreen::Create() {
     BuildStatusSection(scr);
     BuildFileListSection(scr);
 
-    // SD 卡的挂载已经在板级 init（XINGZHI_395::InitializeSdCard()）里完成。
+    // SD 卡的挂载已经在板级 init（METALIO_CLAW_4::InitializeSdCard()）里完成。
     // 这里只做一次状态读取并刷新 UI；如果开机时 mount 失败（卡没插），就只
     // 显示状态文字、不去重试，等用户回到首页 / 后续手动 reboot 时再处理。
     UpdateStatusUI();

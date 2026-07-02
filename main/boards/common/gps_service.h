@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // GpsService -- singleton that powers on the on-board GPS module via the
 // TCA9555 IO expander, drives UART_NUM_1 at the pins / baud specified by
-// the xingzhi-395 hardware, and parses incoming NMEA-0183 sentences.
+// the metalio-claw-4 hardware, and parses incoming NMEA-0183 sentences.
 //
 // Pins / baud are hard-coded to the board spec:
 //

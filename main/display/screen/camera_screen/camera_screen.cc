@@ -32,16 +32,16 @@
 #include "home_screen/home_screen.h"
 #include "screen_util.h"
 
-// 由 boards/xingzhi-395/esp_lcd_nv3051f.c 提供：重发 NV3051F 厂商初始化序列。
+// 由 boards/metalio-claw-4/esp_lcd_nv3051f.c 提供：重发 NV3051F 厂商初始化序列。
 // 这里前向声明，避免把 board 私有头加进 INCLUDE_DIRS。
 extern "C" esp_err_t esp_lcd_nv3051f_replay_vendor_init(esp_lcd_panel_io_handle_t io);
 
-// 由 boards/xingzhi-395/xingzhi-395.cc 提供：返回 NV3051F 面板 IO 句柄。
-extern "C" esp_lcd_panel_io_handle_t xingzhi_395_get_panel_io();
+// 由 boards/metalio-claw-4/metalio-claw-4.cc 提供：返回 NV3051F 面板 IO 句柄。
+extern "C" esp_lcd_panel_io_handle_t metalio_claw_4_get_panel_io();
 
-// 由 boards/xingzhi-395/xingzhi-395.cc 提供：返回板上 I2C_NUM_1 主控总线句柄。
+// 由 boards/metalio-claw-4/metalio-claw-4.cc 提供：返回板上 I2C_NUM_1 主控总线句柄。
 // 摄像头 SCCB 复用这个 handle，避免在同一对 GPIO (7/8) 上同时挂两个 I2C 控制器。
-extern "C" i2c_master_bus_handle_t xingzhi_395_get_i2c_bus();
+extern "C" i2c_master_bus_handle_t metalio_claw_4_get_i2c_bus();
 
 LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_puhui_30_4);
@@ -73,7 +73,7 @@ constexpr int kCamResetRecoverMs    = 120;   // GPIO3 复位脉冲 -> LCD vendor
 constexpr int kCamWorkerStopMs      = 3000;
 
 // MIPI-CSI / OV2710 引脚（板上硬件接线，与例程 example_video_common.h 完全一致）
-// 注意：摄像头 SCCB 不能新建 I2C 控制器，必须复用 xingzhi_395_get_i2c_bus()
+// 注意：摄像头 SCCB 不能新建 I2C 控制器，必须复用 metalio_claw_4_get_i2c_bus()
 // 返回的 I2C_NUM_1 主控（GPIO 7/8 上还挂着 GT911 触摸和 TCA9555 IO 扩展器）。
 constexpr int kSccbI2cFreq   = 100000;
 constexpr int kCamXclkPin    = 32;          // ESP_CLOCK_ROUTER -> GPIO32 输出 24MHz XCLK
@@ -266,9 +266,9 @@ esp_err_t init_video_pipeline() {
 
     // 摄像头 SCCB 复用板上 I2C_NUM_1 主控（GPIO 7/8）。GT911 触摸和 TCA9555
     // IO 扩展器都挂在这条总线上；OV2710 (默认 SCCB 地址 0x36) 不会和它们冲突。
-    i2c_master_bus_handle_t bus = xingzhi_395_get_i2c_bus();
+    i2c_master_bus_handle_t bus = metalio_claw_4_get_i2c_bus();
     if (bus == nullptr) {
-        ESP_LOGE(TAG, "xingzhi_395_get_i2c_bus() returned NULL");
+        ESP_LOGE(TAG, "metalio_claw_4_get_i2c_bus() returned NULL");
         esp_cam_sensor_xclk_stop(s_xclk_handle);
         esp_cam_sensor_xclk_free(s_xclk_handle);
         s_xclk_handle = nullptr;
@@ -529,7 +529,7 @@ void camera_worker_task(void* /*arg*/) {
     // 这里等待复位结束并重发 NV3051F vendor 初始化序列。
     vTaskDelay(pdMS_TO_TICKS(kCamResetRecoverMs));
     {
-        esp_lcd_panel_io_handle_t panel_io = xingzhi_395_get_panel_io();
+        esp_lcd_panel_io_handle_t panel_io = metalio_claw_4_get_panel_io();
         if (panel_io != nullptr) {
             esp_err_t r = esp_lcd_nv3051f_replay_vendor_init(panel_io);
             if (r != ESP_OK) {

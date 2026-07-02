@@ -631,6 +631,87 @@ struct HomeTouchSession {
 };
 HomeTouchSession s_home_touch;
 
+// ---------------------------------------------------------------------------
+// 主屏无操作计时：停留在 HomeScreen 时，5 分钟无任何触摸/滑动则自动关机；
+// 任意用户操作重置计时。仅在主屏 LOADED→DELETE 生命周期内运行。
+// ---------------------------------------------------------------------------
+struct HomeIdleTimerState {
+    lv_timer_t* timer = nullptr;
+    uint32_t last_activity_tick = 0;
+    uint32_t last_status_log_tick = 0;
+    bool timeout_logged = false;
+};
+
+HomeIdleTimerState* s_home_idle = nullptr;
+
+constexpr uint32_t kHomeIdleTimeoutMs = 5 * 60 * 1000;
+constexpr uint32_t kHomeIdleStatusIntervalMs = 60 * 1000;
+constexpr uint32_t kHomeIdleTimerPeriodMs = 1000;
+
+void BeginSystemShutdown(const char* reason);
+
+void ResetHomeIdleTimer() {
+    if (s_home_idle == nullptr) {
+        return;
+    }
+    s_home_idle->last_activity_tick = lv_tick_get();
+    s_home_idle->last_status_log_tick = lv_tick_get();
+    s_home_idle->timeout_logged = false;
+}
+
+void StopHomeIdleTimer() {
+    if (s_home_idle == nullptr) {
+        return;
+    }
+    if (s_home_idle->timer != nullptr) {
+        lv_timer_delete(s_home_idle->timer);
+        s_home_idle->timer = nullptr;
+    }
+    delete s_home_idle;
+    s_home_idle = nullptr;
+}
+
+void OnHomeIdleTimerTick(lv_timer_t* timer) {
+    auto* st = static_cast<HomeIdleTimerState*>(lv_timer_get_user_data(timer));
+    if (st == nullptr) {
+        return;
+    }
+
+    const uint32_t idle_ms = lv_tick_elaps(st->last_activity_tick);
+    if (idle_ms >= kHomeIdleTimeoutMs) {
+        if (!st->timeout_logged) {
+            st->timeout_logged = true;
+            ESP_LOGW(TAG_HOME,
+                     "idle timer timeout: no user activity for %u s on HomeScreen, shutting down",
+                     idle_ms / 1000);
+            BeginSystemShutdown("主屏 5 分钟无操作自动关机");
+        }
+        return;
+    }
+
+    if (lv_tick_elaps(st->last_status_log_tick) < kHomeIdleStatusIntervalMs) {
+        return;
+    }
+
+    st->last_status_log_tick = lv_tick_get();
+    const uint32_t remaining_s = (kHomeIdleTimeoutMs - idle_ms) / 1000;
+    ESP_LOGI(TAG_HOME,
+             "idle timer: idle=%u s, remaining=%u s until auto shutdown",
+             idle_ms / 1000, remaining_s);
+}
+
+void StartHomeIdleTimer() {
+    StopHomeIdleTimer();
+
+    s_home_idle = new HomeIdleTimerState{};
+    s_home_idle->last_activity_tick = lv_tick_get();
+    s_home_idle->last_status_log_tick = lv_tick_get();
+    s_home_idle->timer =
+        lv_timer_create(OnHomeIdleTimerTick, kHomeIdleTimerPeriodMs, s_home_idle);
+    ESP_LOGI(TAG_HOME, "idle timer started (auto shutdown in %u s, status log every %u s)",
+             kHomeIdleTimeoutMs / 1000, kHomeIdleStatusIntervalMs / 1000);
+}
+
 // App 卡片按压过渡：确认点击/长按后触发缩放。
 constexpr int kCellRadius = 28;
 constexpr uint32_t kCellPressScaleMs = 200;  // 与 GetPressTransition 时长一致
@@ -804,7 +885,7 @@ void UpdateHomeStatusBar(HomeStatusState* st);
 
 int GetSavedNetworkType() {
     // 与 DualNetworkBoard / network_screen 共用 NVS 读取逻辑
-    constexpr int kDefaultNetType = 1;  // 默认 4G，与 xingzhi-395 板级一致
+    constexpr int kDefaultNetType = 1;  // 默认 4G，与 metalio-claw-4 板级一致
     const NetworkType type =
         DualNetworkBoard::LoadNetworkTypeFromSettings(kDefaultNetType);
     return type == NetworkType::ML307 ? 1 : 0;
@@ -1272,6 +1353,7 @@ void GoToPage(PagerState* state, int target_page) {
     lv_obj_scroll_to_x(state->pager, target_page * kPanelSize, LV_ANIM_OFF);
     HighlightDot(state, target_page);
     s_last_home_page = target_page;
+    ResetHomeIdleTimer();
 }
 
 // ---------------------------------------------------------------------------
@@ -1372,6 +1454,7 @@ void OnHomePressed(lv_event_t* e) {
         cell != nullptr
             ? static_cast<const AppEntry*>(lv_obj_get_user_data(cell))
             : nullptr;
+    ResetHomeIdleTimer();
 }
 
 void OnHomePressing(lv_event_t* e) {
@@ -1387,6 +1470,9 @@ void OnHomePressing(lv_event_t* e) {
     lv_indev_get_point(indev, &p);
     const int dx = p.x - s_home_touch.start_x;
     const int dy = p.y - s_home_touch.start_y;
+    if (!HomeTouchIsTapLike(dx, dy)) {
+        ResetHomeIdleTimer();
+    }
     HomeTouchTrySwipeDuringPress(state, dx, dy);
 }
 
@@ -1448,19 +1534,20 @@ void OnHomeScreenLoaded(lv_event_t* e) {
     // 屏幕加载完成、layout 已经算好，这时再把 pager 滚到「上次停留的页」。
     // 直接在 Create() 末尾 scroll_to_x 经常因为 layout 还没算赶不上首帧。
     auto* state = static_cast<PagerState*>(lv_event_get_user_data(e));
-    if (state == nullptr || state->pager == nullptr) {
-        return;
-    }
-    if (s_last_home_page > 0 && s_last_home_page < state->page_count) {
+    if (state != nullptr && state->pager != nullptr &&
+        s_last_home_page > 0 && s_last_home_page < state->page_count) {
         lv_obj_update_layout(state->pager);
         lv_obj_scroll_to_x(state->pager, s_last_home_page * kPanelSize,
                            LV_ANIM_OFF);
         HighlightDot(state, s_last_home_page);
     }
+
+    StartHomeIdleTimer();
 }
 
 void OnScreenDeleted(lv_event_t* e) {
     CancelCellScaleTimer();
+    StopHomeIdleTimer();
     delete static_cast<PagerState*>(lv_event_get_user_data(e));
 }
 
@@ -1494,29 +1581,16 @@ void ClosePowerDialog() {
     s_pwr_dlg = PowerDialogUi{};
 }
 
-void OnPwrMaskClicked(lv_event_t* e);  // forward decl: ShowShutdownProgress 要摘掉它
+void OnPwrMaskClicked(lv_event_t* e);  // forward decl
 
-// 把电源对话框替换成「正在关机…」进度提示：
-//   - 摘掉 mask 的点击关闭回调，避免用户点空白处把进度圈也带走
-//   - 删除原来的两按钮 card，留下 mask 继续吞掉所有点击
-//   - mask 上新增一列：圆形 spinner + 「正在关机...」文字
-// 这个 UI 不需要主动关闭：脉冲序列跑完硬件会切电，整个屏幕随之熄灭。
-void ShowShutdownProgress() {
-    if (s_pwr_dlg.mask == nullptr) {
-        return;
-    }
+lv_obj_t* s_shutdown_screen = nullptr;
 
-    lv_obj_remove_event_cb(s_pwr_dlg.mask, OnPwrMaskClicked);
-
-    if (s_pwr_dlg.card != nullptr) {
-        lv_obj_delete(s_pwr_dlg.card);
-        s_pwr_dlg.card = nullptr;
-    }
-
-    lv_obj_t* box = lv_obj_create(s_pwr_dlg.mask);
+void AppendShutdownProgressContent(lv_obj_t* parent) {
+    lv_obj_t* box = lv_obj_create(parent);
     lv_obj_remove_style_all(box);
     lv_obj_set_size(box, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_center(box);
+    lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_pad_row(box, 24, LV_PART_MAIN);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
@@ -1541,6 +1615,28 @@ void ShowShutdownProgress() {
     lv_obj_remove_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
 }
 
+lv_obj_t* CreateShutdownScreen() {
+    lv_obj_t* screen = lv_obj_create(NULL);
+    lv_obj_set_size(screen, kPanelSize, kPanelSize);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(screen, 0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(screen, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    AppendShutdownProgressContent(screen);
+    return screen;
+}
+
+// 切到独立黑底关机关机页，避免在原页面半透明遮罩上显示。
+void ShowShutdownScreen() {
+    ClosePowerDialog();
+
+    if (s_shutdown_screen == nullptr) {
+        s_shutdown_screen = CreateShutdownScreen();
+    }
+    lv_screen_load(s_shutdown_screen);
+}
+
 // 关机脉冲 task：高 10ms / 低 10ms × 10 次。跑完自删除，不返回。
 // 如果硬件确实在脉冲过程中切电，task 会被电源切断带走，无需特别处理。
 void PwrShutdownPulseTask(void* /*arg*/) {
@@ -1556,12 +1652,21 @@ void PwrShutdownPulseTask(void* /*arg*/) {
     vTaskDelete(NULL);
 }
 
-void OnPwrShutdownClicked(lv_event_t* /*e*/) {
-    ESP_LOGW(TAG_HOME, "用户选择 [关机]：开始 PWR_KEY_PULSE 脉冲序列");
-    // 不关掉对话框，而是把它替换成「正在关机…」进度圈。等硬件切电时整个
-    // 屏幕都会熄灭，所以不用写代码主动让进度圈消失。
-    ShowShutdownProgress();
+void BeginSystemShutdown(const char* reason) {
+    static bool shutting_down = false;
+    if (shutting_down) {
+        return;
+    }
+    shutting_down = true;
+
+    ESP_LOGW(TAG_HOME, "%s：开始 PWR_KEY_PULSE 脉冲序列", reason);
+    StopHomeIdleTimer();
+    ShowShutdownScreen();
     xTaskCreate(PwrShutdownPulseTask, "pwr_off_pulse", 2048, nullptr, 5, nullptr);
+}
+
+void OnPwrShutdownClicked(lv_event_t* /*e*/) {
+    BeginSystemShutdown("用户选择 [关机]");
 }
 
 void OnPwrRebootClicked(lv_event_t* /*e*/) {
