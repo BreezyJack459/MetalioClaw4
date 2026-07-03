@@ -13,7 +13,7 @@
 ## Table of Contents
 
 1. [Product Overview](#1-product-overview)
-2. [Core Features](#2-core-features)
+2. [Key Feature](#2-core-features)
 3. [Application Scenarios](#3-application-scenarios)
 4. [System Architecture](#4-system-architecture)
 5. [Hardware Specifications](#5-hardware-specifications)
