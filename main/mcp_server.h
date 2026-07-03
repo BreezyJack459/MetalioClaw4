@@ -326,6 +326,16 @@ public:
     void ParseMessage(const cJSON* json);
     void ParseMessage(const std::string& message);
 
+    /**
+     * @brief Execute a tool call synchronously and return the JSON result.
+     * Used by the Hermes MCP HTTP server.
+     * @param tool_name  Name of the tool to call
+     * @param arguments  JSON object of arguments (may be NULL)
+     * @return JSON string result
+     * @throws std::runtime_error on error
+     */
+    std::string CallToolSync(const std::string& tool_name, const cJSON* arguments);
+
 private:
     McpServer();
     ~McpServer();

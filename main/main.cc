@@ -9,6 +9,7 @@
 
 #include "application.h"
 #include "system_info.h"
+#include "hermes_mcp_server.h"
 
 #define TAG "main"
 
@@ -27,6 +28,9 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     // Launch the application
+    // Start Hermes MCP HTTP server for direct control
+    ESP_ERROR_CHECK(hermes_mcp_server_start(8090));
+
     auto& app = Application::GetInstance();
     app.Start();
 }

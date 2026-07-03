@@ -563,3 +563,90 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
         }
     });
 }
+
+std::string McpServer::CallToolSync(const std::string& tool_name, const cJSON* tool_arguments) {
+    auto tool_iter = std::find_if(tools_.begin(), tools_.end(), 
+                                 [&tool_name](const McpTool* tool) { 
+                                     return tool->name() == tool_name; 
+                                 });
+    
+    if (tool_iter == tools_.end()) {
+        throw std::runtime_error("Unknown tool: " + tool_name);
+    }
+
+    PropertyList arguments = (*tool_iter)->properties();
+    for (auto& argument : arguments) {
+        bool found = false;
+        if (cJSON_IsObject(tool_arguments)) {
+            auto value = cJSON_GetObjectItem(tool_arguments, argument.name().c_str());
+            if (argument.type() == kPropertyTypeBoolean && cJSON_IsBool(value)) {
+                argument.set_value<bool>(value->valueint == 1);
+                found = true;
+            } else if (argument.type() == kPropertyTypeInteger && cJSON_IsNumber(value)) {
+                argument.set_value<int>(value->valueint);
+                found = true;
+            } else if (argument.type() == kPropertyTypeString && cJSON_IsString(value)) {
+                argument.set_value<std::string>(value->valuestring);
+                found = true;
+            }
+        }
+        if (!argument.has_default_value() && !found) {
+            throw std::runtime_error("Missing valid argument: " + argument.name());
+        }
+    }
+
+    // Execute on main thread and wait for result
+    SemaphoreHandle_t done = xSemaphoreCreateBinary();
+    if (!done) {
+        throw std::runtime_error("Failed to create semaphore");
+    }
+
+    struct SyncResult {
+        std::string value;
+        std::string error;
+    };
+    auto* result = new SyncResult();
+
+    auto& app = Application::GetInstance();
+    app.Schedule([this, tool_iter, arguments = std::move(arguments), done, result]() {
+        try {
+            ReturnValue rv = (*tool_iter)->Call(arguments);
+            // Use std::visit to extract result from variant
+            struct ResultExtractor {
+                std::string value;
+                void operator()(const std::string& v) { value = v; }
+                void operator()(cJSON* json) {
+                    char* s = cJSON_PrintUnformatted(json);
+                    value = s ? s : "{}";
+                    if (s) cJSON_free(s);
+                }
+                void operator()(bool b) { value = b ? "true" : "false"; }
+                void operator()(int i) { value = std::to_string(i); }
+                void operator()(ImageContent* img) { value = img->to_json(); }
+            };
+            ResultExtractor ext;
+            std::visit(ext, rv);
+            result->value = std::move(ext.value);
+        } catch (const std::exception& e) {
+            result->error = e.what();
+        }
+        xSemaphoreGive(done);
+    });
+
+    if (xSemaphoreTake(done, pdMS_TO_TICKS(15000)) != pdTRUE) {
+        vSemaphoreDelete(done);
+        delete result;
+        throw std::runtime_error("Tool call timed out");
+    }
+
+    vSemaphoreDelete(done);
+    std::string ret = std::move(result->value);
+    std::string err = std::move(result->error);
+    delete result;
+
+    if (!err.empty()) {
+        throw std::runtime_error(err);
+    }
+
+    return ret;
+}
