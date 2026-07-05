@@ -18,6 +18,12 @@
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_lcd_fl7707n.h"
+
+// Camera (MCP Vision tool)
+#include "esp32_camera.h"
+#include "esp_cam_sensor_xclk.h"
+#include "esp_video_init.h"
+#include "esp_heap_caps.h"
 #include "esp_lcd_nv3051f.h"
 
 // ========== LCD 屏幕选择 ==========
@@ -115,6 +121,13 @@ public:
     ~Wxcho() {}
 };
 
+// Camera (MCP Vision tool) — same XCLK/power params as CameraScreen
+static constexpr int kCamXclkPin      = 32;
+static constexpr int kCamXclkFreq     = 24000000;
+static constexpr int kCamPowerOnMs    = 200;
+static constexpr int kCamXclkSettleMs = 50;
+static constexpr int kSccbFreq        = 100000;
+
 class METALIO_CLAW_4 : public DualNetworkBoard {
 private:
     i2c_master_bus_handle_t i2c_bus_;
@@ -126,6 +139,10 @@ private:
     esp_lcd_panel_handle_t panel_handle = NULL;
 
     Wxcho* wxcho;
+
+    // Camera (MCP Vision tool)
+    esp_cam_sensor_xclk_handle_t cam_xclk_handle_ = nullptr;
+    Camera* camera_ = nullptr;
 
     esp_err_t err;
     bool init0x60 = false;
@@ -672,6 +689,57 @@ public:
     }
 
     virtual Display* GetDisplay() override { return display_; }
+
+    virtual Camera* GetCamera() override {
+        if (camera_) return camera_;
+
+        // Power on CAM_PWDN (LOW = on)
+        auto& io = IOExpander::getInstance();
+        io.setLevel(IOExpander::Pin::CAM_PWDN, false);
+        vTaskDelay(pdMS_TO_TICKS(kCamPowerOnMs));
+
+        // Start XCLK (GPIO32, 24 MHz)
+        esp_cam_sensor_xclk_config_t xclk_cfg = {};
+        xclk_cfg.esp_clock_router_cfg.xclk_pin     = static_cast<gpio_num_t>(kCamXclkPin);
+        xclk_cfg.esp_clock_router_cfg.xclk_freq_hz = kCamXclkFreq;
+
+        esp_err_t err = esp_cam_sensor_xclk_allocate(
+            ESP_CAM_SENSOR_XCLK_ESP_CLOCK_ROUTER, &cam_xclk_handle_);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "cam XCLK alloc failed: %d", err);
+            return nullptr;
+        }
+        err = esp_cam_sensor_xclk_start(cam_xclk_handle_, &xclk_cfg);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "cam XCLK start failed: %d", err);
+            esp_cam_sensor_xclk_free(cam_xclk_handle_);
+            cam_xclk_handle_ = nullptr;
+            return nullptr;
+        }
+        vTaskDelay(pdMS_TO_TICKS(kCamXclkSettleMs));
+
+        // Build MIPI-CSI config reusing board I2C bus
+        esp_video_init_csi_config_t csi_config = {};
+        csi_config.reset_pin = static_cast<gpio_num_t>(-1);  // board handles reset
+        csi_config.pwdn_pin  = static_cast<gpio_num_t>(-1);  // board handles pwdn
+
+        i2c_master_bus_handle_t bus = metalio_claw_4_get_i2c_bus();
+        csi_config.sccb_config.init_sccb  = false;
+        csi_config.sccb_config.i2c_handle = bus;
+        csi_config.sccb_config.freq       = kSccbFreq;
+
+        const esp_video_init_config_t cam_config = {
+            .csi = &csi_config,
+        };
+
+        camera_ = new (std::nothrow) Esp32Camera(cam_config);
+        if (!camera_) {
+            ESP_LOGE(TAG, "failed to allocate Esp32Camera");
+            return nullptr;
+        }
+        ESP_LOGI(TAG, "MCP camera initialized for Vision tool");
+        return camera_;
+    }
 
     virtual Backlight* GetBacklight() override {
         static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);

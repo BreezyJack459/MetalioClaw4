@@ -63,6 +63,14 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     int keepalive_interval = settings.GetInt("keepalive", 240);
     publish_topic_ = settings.GetString("publish_topic");
 
+    // Override MQTT endpoint to local gateway.
+    // The device may have a stale cloud MQTT broker from earlier OTA.
+    // NOTE: plain "host:port" format (no mqtt:// scheme) — the parser uses
+    // endpoint.find(':') to split host from port and cannot handle URI prefixes.
+    endpoint = "192.168.1.233:1883";
+    ESP_LOGI(TAG, "MQTT endpoint overridden (local): %s", endpoint.c_str());
+    ESP_LOGI(TAG, "NVS client_id=%s, username=%s", client_id.c_str(), username.c_str());
+
     if (endpoint.empty()) {
         ESP_LOGW(TAG, "MQTT endpoint is not specified");
         if (report_error) {

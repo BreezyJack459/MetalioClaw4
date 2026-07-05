@@ -872,6 +872,55 @@ bool Esp32Camera::SetVFlip(bool enabled) {
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Downscale helpers — reduces MJPEG encode PSRAM pressure
+// ---------------------------------------------------------------------------
+
+// 上传用縮放解析度（大幅降低 PSRAM 壓力）
+static constexpr uint16_t kExplainWidth = 640;
+static constexpr uint16_t kExplainHeight = 480;
+
+/**
+ * @brief Nearest-neighbour YUYV downscale (source 1920×1080 → target 640×480)
+ *
+ * YUYV each 2 horizontal pixels share one Cb+Cr pair.
+ * Output keeps the same YUYV stride (2 B/px). Chroma for each output 2-pixel
+ * group is taken from the source group that maps to the first output pixel —
+ * good enough for MCP vision.
+ *
+ * @return newly allocated PSRAM buffer; caller must heap_caps_free()
+ */
+static uint8_t* downscale_yuyv(const uint8_t* src, uint16_t src_w, uint16_t src_h,
+                                uint16_t dst_w, uint16_t dst_h, size_t& dst_len) {
+    dst_len = (size_t)dst_w * dst_h * 2;
+    uint8_t* dst = (uint8_t*)heap_caps_malloc(dst_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!dst) return nullptr;
+
+    for (uint16_t dy = 0; dy < dst_h; dy++) {
+        uint16_t sy = dy * src_h / dst_h;
+        for (uint16_t dx = 0; dx < dst_w; dx += 2) {
+            // 兩個輸出像素一組
+            uint16_t sx0 = dx * src_w / dst_w;          // 第 1 個對應來源 X
+            uint16_t sx1 = (dx + 1) * src_w / dst_w;    // 第 2 個
+            if (sx1 >= src_w) sx1 = src_w - 1;
+
+            int src_p0 = sy * src_w + sx0;
+            int src_p1 = sy * src_w + sx1;
+            int dst_base = (dy * dst_w + dx);  // byte offset for group start
+
+            // Y0 (byte 0)
+            dst[dst_base * 2 + 0] = src[src_p0 * 2];
+            // Cb (byte 1) — from source group of first pixel
+            dst[dst_base * 2 + 1] = src[(src_p0 / 2) * 4 + 1];
+            // Y1 (byte 2)
+            dst[dst_base * 2 + 2] = src[src_p1 * 2];
+            // Cr (byte 3) — from source group of first pixel
+            dst[dst_base * 2 + 3] = src[(src_p0 / 2) * 4 + 3];
+        }
+    }
+    return dst;
+}
+
 /**
  * @brief 将摄像头捕获的图像发送到远程服务器进行AI分析和解释
  *
@@ -884,6 +933,7 @@ bool Esp32Camera::SetVFlip(bool enabled) {
  * - 采用分块传输编码(chunked transfer encoding)优化内存使用
  * - 通过队列机制实现编码线程和发送线程的数据同步
  * - 支持设备ID、客户端ID和认证令牌的HTTP头部配置
+ * - 编码前自动缩放到 kExplainWidth×kExplainHeight 以减少PSRAM使用
  *
  * @param question 要向AI提出的关于图像的问题，将作为表单字段发送
  * @return std::string 服务器返回的JSON格式响应字符串
@@ -907,13 +957,61 @@ std::string Esp32Camera::Explain(const std::string& question) {
         throw std::runtime_error("Failed to create JPEG queue");
     }
 
+    // Downscale to kExplainWidth×kExplainHeight to reduce PSRAM pressure
+    // during JPEG encode. Works for ANY format by copying every Nth pixel.
+    // After downscale the original 4.1MB frame_.data is freed immediately.
+    uint8_t* ds_data = nullptr;
+    size_t ds_len = 0;
+    uint16_t encode_w = frame_.width ? frame_.width : 320;
+    uint16_t encode_h = frame_.height ? frame_.height : 240;
+
+    if (frame_.data != nullptr && frame_.width > 0 && frame_.height > 0 &&
+        (frame_.width > kExplainWidth || frame_.height > kExplainHeight)) {
+
+        if (frame_.format == V4L2_PIX_FMT_YUYV) {
+            ds_data = downscale_yuyv(frame_.data, frame_.width, frame_.height,
+                                      kExplainWidth, kExplainHeight, ds_len);
+        } else {
+            // Generic nearest-neighbour: derive bytes-per-pixel from frame size
+            size_t bpp = frame_.len / ((size_t)frame_.width * frame_.height);
+            if (bpp == 2 || bpp == 3) {
+                ds_len = (size_t)kExplainWidth * kExplainHeight * bpp;
+                ds_data = (uint8_t*)heap_caps_malloc(ds_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (ds_data) {
+                    for (uint16_t dy = 0; dy < kExplainHeight; dy++) {
+                        uint16_t sy = dy * frame_.height / kExplainHeight;
+                        for (uint16_t dx = 0; dx < kExplainWidth; dx++) {
+                            uint16_t sx = dx * frame_.width / kExplainWidth;
+                            memcpy(ds_data + (dy * kExplainWidth + dx) * bpp,
+                                   frame_.data + (sy * frame_.width + sx) * bpp, bpp);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (ds_data) {
+            ESP_LOGI(TAG, "MCP vision downscale: %dx%d → %dx%d (%zu bytes, fmt=0x%08x)",
+                     frame_.width, frame_.height, kExplainWidth, kExplainHeight,
+                     ds_len, frame_.format);
+            encode_w = kExplainWidth;
+            encode_h = kExplainHeight;
+            // Free original buffer NOW — saves ~4MB for the encoder
+            heap_caps_free(frame_.data);
+            frame_.data = nullptr;
+            frame_.len = 0;
+        }
+    }
+
     // We spawn a thread to encode the image to JPEG using optimized encoder (cost about 500ms and 8KB SRAM)
-    encoder_thread_ = std::thread([this, jpeg_queue]() {
-        uint16_t w = frame_.width ? frame_.width : 320;
-        uint16_t h = frame_.height ? frame_.height : 240;
+    encoder_thread_ = std::thread([this, jpeg_queue, ds_data, ds_len, encode_w, encode_h]() {
+        uint16_t w = encode_w;
+        uint16_t h = encode_h;
         v4l2_pix_fmt_t enc_fmt = frame_.format;
+        const uint8_t* src_data = ds_data ? ds_data : frame_.data;
+        size_t src_len = ds_data ? ds_len : frame_.len;
         bool ok = image_to_jpeg_cb(
-            frame_.data, frame_.len, w, h, enc_fmt, 80,
+            const_cast<uint8_t*>(src_data), src_len, w, h, enc_fmt, 80,
             [](void* arg, size_t index, const void* data, size_t len) -> size_t {
                 auto jpeg_queue = static_cast<QueueHandle_t>(arg);
                 JpegChunk chunk = {.data = nullptr, .len = len};
@@ -936,6 +1034,9 @@ std::string Esp32Camera::Explain(const std::string& question) {
         if (!ok) {
             JpegChunk chunk = {.data = nullptr, .len = 0};
             xQueueSend(jpeg_queue, &chunk, portMAX_DELAY);
+        }
+        if (ds_data) {
+            heap_caps_free(ds_data);
         }
     });
 

@@ -80,11 +80,8 @@ void WebsocketProtocol::CloseAudioChannel() {
 }
 
 bool WebsocketProtocol::OpenAudioChannel() {
-    // Always use the local xiaozhi server URL
-    std::string url = "ws://192.168.1.233:8000/xiaozhi/v1/";
-    version_ = 2;
-    ESP_LOGI(TAG, "Connecting to local xiaozhi server: %s (version=%d)", url.c_str(), version_);
     Settings settings("websocket", false);
+    std::string url = settings.GetString("url");
     std::string token = settings.GetString("token");
     int version = settings.GetInt("version");
     if (version != 0) {
